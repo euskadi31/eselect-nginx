@@ -1,0 +1,129 @@
+# -*-eselect-*-  vim: ft=eselect
+# Copyright 2010-2011 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+
+
+inherit config multilib
+
+DESCRIPTION="Manage nginx vhosts"
+MAINTAINER="axel@etcheverry.biz"
+
+available_path="/etc/nginx/vhost.available"
+enable_path="/etc/nginx/vhost.enable"
+
+check_path() {
+    if [ ! -d $1 ]; then
+        mkdir -p $1
+    fi
+}
+
+find_available_vhost() {
+	if [ -d "${available_path}" ]; then
+		for ext in "${available_path}"/*.conf; do
+			echo $(basename $ext .conf)
+		done | sort -u
+	fi
+}
+
+find_enable_vhost() {
+	if [ -d "${enable_path}" ]; then
+		for ext in "${enable_path}"/*.conf; do
+			echo $(basename $ext .conf)
+		done | sort -u
+	fi
+}
+
+resolv_target() {
+	local targets=( $(find_available_vhost) )
+	if is_number $1; then
+		[[ $1 -le ${#targets[@]} && $1 -gt 0 ]] && echo "${targets[ $(( $1 -1 )) ]}"
+	elif has $1 ${targets[@]}; then
+		echo $1
+	fi
+}
+
+## List action
+
+describe_list() {
+	echo "Lists available nginx vhosts"
+}
+
+do_list() {
+	local available_vhost
+	local enable_vhost
+
+    check_path $available_path
+    check_path $enable_path
+
+	available_vhost=( $(find_available_vhost) )
+	enable_vhost=( $(find_enable_vhost) )
+
+	for (( i = 0; i < ${#available_vhost[@]}; i++ )) ; do
+		for (( j = 0; j < ${#enable_vhost[@]}; j++ )) ; do
+			[[ ${enable_vhost[j]} == ${available_vhost[i]} ]] && available_vhost[i]=$(highlight_marker "${available_vhost[i]}")
+		done
+	done
+	write_numbered_list -m "(none found)" "${available_vhost[@]}"
+}
+
+
+## Enable action
+
+describe_enable() {
+	echo "Enable a nginx vhost"
+}
+
+describe_enable_parameters() {
+	echo "<target>"
+}
+
+describe_enable_options() {
+	echo "target:  Target name or number (from the 'list' action)"
+}
+
+do_enable() {
+
+    check_path $available_path
+    check_path $enable_path
+
+	local target=$(resolv_target $1)
+	local src="${available_path}/${target}.conf"
+	local dest="${enable_path}/${target}.conf"
+
+	[[ -z $target ]] && die -q "Bad target"
+
+	if [ ! -L "$dest" ]; then
+		ln -sf $src $dest || \
+			die -q "Failed to create symlink for ${dest}"
+	fi
+}
+
+## Disable action
+
+describe_disable() {
+	echo "Disable a nginx vhost"
+}
+
+describe_disable_parameters() {
+	echo "<target>"
+}
+
+describe_disable_options() {
+	echo "target:  Target name or number (from the 'list' action)"
+}
+
+do_disable() {
+    
+    check_path $available_path
+    check_path $enable_path
+
+	local target=$(resolv_target $1)
+	local src="${available_path}/${target}.conf"
+    local dest="${enable_path}/${target}.conf"
+
+	[[ -z $target ]] && die -q "Bad target"
+
+	if [ -L "$dest" ]; then
+		rm $dest
+	fi
+}
